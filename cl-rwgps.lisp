@@ -412,7 +412,7 @@
             :bad_elevations (to-bool bad-elevations)
             :description (if description description "")))
 
-(defun file-post (api content)
+(defun post-file (api content)
   "Used to post a file to the trips.json API end-point."
   (let ((real-content (copy-list content)))
     (push (cons "version" 2) real-content)
@@ -441,7 +441,7 @@
 (defun new-ride-file (name file-name &key (description) (bad-elevations))
   "Low level function to create a new ride from an uploaded TCX, GPX, FIT or KML file. Due to the potential time it takes to parse a file, this end point is non-blocking and queues up a background job to process the file. As a result, you will need to poll a second endpoint in order to get the actual trip information. Usually jobs are processed within ten seconds, though occasionally they can take a couple minutes depending on server load. As a result, please implement some sort of exponential back-off to reduce the number of requests.
   The convenience function (upload-ride) is better in most situations, as it implements exponential back-off."
-  (file-post "trips"
+  (post-file "trips"
              (list (cons "name" name)
                    (cons "file" (pathname file-name))
 
