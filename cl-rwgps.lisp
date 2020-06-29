@@ -184,17 +184,6 @@
                     :cookie-jar *cookies*))
       (values (read-json-from-string body) status response-headers uri))))
 
-;; (defun connect ()
-;;   "Authenticate with RideWithGPS.
-;;    Reads user name from *api-key-file* and calls *password-function* to get password.
-;;    Sets *user* special variable used in other functions."
-;;   (multiple-value-bind (json status response-headers uri)
-;;       (get-api "users/current"
-;;                :email (user-name)
-;;                :password (funcall *password-function*))
-;;     (setf *user* json)
-;;     (values *user* status response-headers uri)))
-
 (defun connect ()
   "Authenticate with RideWithGPS.
    Reads user name from *api-key-file* and calls *password-function* to get password.
@@ -205,9 +194,6 @@
                  :email (user-name)
                  :password password)
       (setf *user* json)
-      ;; (post-api "login"
-      ;;           :email (user-name)
-      ;;           :password password)
       (values *user* status response-headers uri))))
 
 (defun user ()
@@ -228,7 +214,7 @@
    If json-or-number[field] doesn't exist then return json-or-number['id']."
 
   (etypecase json-or-number
-    (jso (if-let ((js (getjso field json-or-number)))
+    (jso (if-let ((js (and field (getjso field json-or-number))))
            (getjso "id" js)
            (getjso "id" json-or-number)))
     (integer json-or-number)))
@@ -301,7 +287,7 @@
   (with-open-file (outs file-name
                         :direction :output
                         :if-exists :supersede)
-    (write-sequence (dex:get (download-url "trips" id file-type
+    (write-sequence (dex:get (download-url "trips" (to-id id "ride") file-type
                                            :sub_format "track"
                                            :reduce_to reduce-to
                                            :cues_as_wpt (to-bool cues-as-wpt)
@@ -309,6 +295,17 @@
                              :cookie-jar *cookies*)
                     outs))
   t)
+
+(defun browse (object type)
+  "Browse object with given id and specified type on the Ride With GPS website."
+  (let ((string-type (string-downcase (format nil "~a" type))))
+    (uiop:run-program (concatenate
+                       'string
+                       "$BROWSER "
+                       *rwgps-url* "/"
+                       string-type
+                       "s/"
+                       (format nil "~a" (to-id object string-type))))))
 
 (defun download-route (id file-name file-type &key (turn-notify-distance 30))
   "Download a route to a local file."

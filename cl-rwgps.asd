@@ -22,8 +22,8 @@
   :version "0.0.1"
   :serial t
   :depends-on
-  #+swank(#:dexador #:st-json #:j-utils #:alexandria  #:cl-cookie #:swank #:quri)
-  #-swank(#:dexador #:st-json #:j-utils #:alexandria  #:cl-cookie)
+  #+swank(#:dexador #:st-json #:j-utils #:alexandria  #:cl-cookie #:swank #:quri #:uiop)
+  #-swank(#:dexador #:st-json #:j-utils #:alexandria  #:cl-cookie #:quri #:uiop)
   :components ((:file "package")
                (:file "cl-rwgps"))
   :in-order-to ((test-op (test-op cl-rwgps.test))))

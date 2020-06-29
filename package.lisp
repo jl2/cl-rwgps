@@ -61,6 +61,7 @@
    ;; Queued task queries
    #:queued-task-status
 
+   #:browse
    #:download-ride
    #:download-route
 
