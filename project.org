@@ -1,0 +1,87 @@
+* cl-rwgps
+** About
+A package for using the Ride With GPS web API.  The package is
+intended to be used from the REPL, but should be easy to use in an
+application by setting a few parameters.
+
+** Connecting
+Using this package requires a Ride With GPS API key, which you can get
+from [[https://ridewithgps.com/api][here]].
+
+cl-rwgps reads the API key and user name from the JSON file specified
+in ~*api-key-file*~.  The default location is
+~(asdf:system-relative-pathname :cl-rwgps ".api-key")~, which is a file
+named ".api-key" in the package directory.  If you've cloned the repo
+to "~/src/cl-rwgps", the file will be "~/src/cl-rwgps/.api-key".
+
+The API key file must have the following entries:
+
+#+BEGIN_SRC javascript
+{
+    "api-key": "<your API key>",
+    "user-name": "<your username or email>"
+}
+#+END_SRC
+
+By default, the user will be prompted for their password.  This can be
+changed by setting ~rwgps:*password-function*~.  The following snippet
+hardcodes the password:
+
+#+BEGIN_SRC lisp
+
+(ql:quickload :cl-rwgps)
+(set rwgps:*password-function* (lambda () "<your password>"))
+(rwgps:login)
+#+END_SRC
+
+
+** Using the Package
+cl-rwgps implements thin wrappers around all of the version 2 Ride
+With GPS API.  Each API function returns the JSON blob returned by the
+API function.  For API documentation, see [[https://ridewithgps.com/api][the Ride With GPS API documentation]]
+for more information.
+
+#+BEGIN_SRC lisp :results output
+
+  ;; Load
+  (ql:quickload '(:cl-rwgps :st-json) :silent t)
+
+  ;; Initiate session
+  (rwgps:login)
+
+  ;; Fetch user details
+  (rwgps:user)
+
+  ;; Fetch the 10 most recent rides
+  (let ((first-10-rides (st-json:getjso "results" (rwgps:user-rides :offset 0 :limit 10))))
+
+  ;; Fetch trip details for most recent ride
+  (format t
+          "Total distance for last 10 rides: ~a meters.~%"
+          (loop for ride in first-10-rides summing (st-json:getjso "distance" ride))))
+#+END_SRC
+
+#+RESULTS:
+: Total distance for last 10 rides: 190463.78 meters.
+
+** Direct API Access
+The post-api and get-api functions can be used to call web API functions directly.
+
+** upload-ride
+~(upload-ride)~ is a convenience wrapper around ~(new-ride-file)~ and
+~(queued-task-status)~.  It uploads a GPX, KML, or FIT file, and then
+waits for it to finish processing before returning the new object.
+
+
+** License
+ISC
+
+
+Copyright (c) 2020 Jeremiah LaRocco <jeremiah_larocco@fastmail.com>
+
+
+
+
+* TODO
+** TODO More API convenience functions
+** TODO Fill in a TODO list.
