@@ -23,7 +23,7 @@
    ;; Login and authentication
    #:api-key
    #:user-name
-   #:login
+   #:connect
 
    ;; Debug logging stream
    #:*debug-stream*
@@ -60,6 +60,9 @@
 
    ;; Queued task queries
    #:queued-task-status
+
+   #:download-ride
+   #:download-route
 
    ;; Ride creation commands
    #:new-ride-points

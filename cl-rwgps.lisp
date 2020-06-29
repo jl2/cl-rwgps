@@ -78,7 +78,7 @@
 (defun auth-token ()
   "Return the RideWithGPS authentication token, logs in if necessary."
   (when (null *user*)
-    (login))
+    (connect))
   (getjso* "user.auth_token" *user*))
 
 (defun api-url (api &rest parameters &key &allow-other-keys)
@@ -101,7 +101,7 @@
 
 (defun get-api (api &rest parameters &key &allow-other-keys)
   "Make a GET request to RideWithGPS and parses the JSON result.
-   Calls (login) when authentication fails (401 error)."
+   Calls (connect) when authentication fails (401 error)."
 
   (multiple-value-bind (body status response-headers uri)
       (handler-bind (
@@ -111,7 +111,7 @@
                         (declare (ignorable params))
                         (when *debug-stream*
                           (format *debug-stream* "~a - reconnecting...~%" params))
-                        (login)
+                        (connect)
                         (dex:retry-request 1 :interval 0)))
 
                      ;; Ignore 404 errors because they indicate empty result sets
@@ -125,17 +125,19 @@
                             :apikey (api-key)
                             :auth_token (auth-token)
                             parameters)
-                     :headers (get-headers))
+                     :headers (get-headers)
+                     :cookie-jar *cookies*)
             (dex:get (apply #'api-url api
                             :version 2
                             :apikey (api-key)
                             parameters)
-                     :headers (get-headers))))
+                     :headers (get-headers)
+                     :cookie-jar *cookies*)))
     (values (read-json-from-string body) status response-headers uri)))
 
 (defun post-api (api &rest parameters &key (content) &allow-other-keys)
   "Make a POST request to RideWithGPS and parses the JSON result.
-   Calls (login) when authentication fails (401 error).
+   Calls (connect) when authentication fails (401 error).
    Parameters can be passed as a JSON object using :content keyword, or as
    keyword arguments."
 
@@ -158,7 +160,7 @@
     ;; Convert keyword parameters into JSON content parameters
     (loop for (name  value) on filtered-parameters by #'cddr
        when value
-       do (setf (getjso (quri:url-encode (format nil "~a" name)) real-content)
+       do (setf (getjso (quri:url-encode (string-downcase (format nil "~a" name))) real-content)
                 (quri:url-encode (format nil "~a" value))))
 
     (multiple-value-bind (body status response-headers uri)
@@ -169,7 +171,7 @@
                           (declare (ignorable params))
                           (when *debug-stream*
                             (format *debug-stream* "~a - reconnecting...~%" params))
-                          (login)
+                          (connect)
                           (dex:retry-request 1 :interval 0)))
 
                        ;; Ignore 404 errors because they indicate empty result sets
@@ -182,16 +184,31 @@
                     :cookie-jar *cookies*))
       (values (read-json-from-string body) status response-headers uri))))
 
-(defun login ()
+;; (defun connect ()
+;;   "Authenticate with RideWithGPS.
+;;    Reads user name from *api-key-file* and calls *password-function* to get password.
+;;    Sets *user* special variable used in other functions."
+;;   (multiple-value-bind (json status response-headers uri)
+;;       (get-api "users/current"
+;;                :email (user-name)
+;;                :password (funcall *password-function*))
+;;     (setf *user* json)
+;;     (values *user* status response-headers uri)))
+
+(defun connect ()
   "Authenticate with RideWithGPS.
    Reads user name from *api-key-file* and calls *password-function* to get password.
    Sets *user* special variable used in other functions."
-  (multiple-value-bind (json status response-headers uri)
-      (get-api "users/current"
-               :email (user-name)
-               :password (funcall *password-function*))
-    (setf *user* json)
-    (values *user* status response-headers uri)))
+  (let ((password (funcall *password-function*)))
+    (multiple-value-bind (json status response-headers uri)
+        (get-api "users/current"
+                 :email (user-name)
+                 :password password)
+      (setf *user* json)
+      ;; (post-api "login"
+      ;;           :email (user-name)
+      ;;           :password password)
+      (values *user* status response-headers uri))))
 
 (defun user ()
   "Returns details about the currently authenticated user."
@@ -200,7 +217,7 @@
 (defun user-current ()
   "Returns details about the currently authenticated user."
   (when (null *user*)
-    (login))
+    (connect))
   *user*)
 
 
@@ -218,9 +235,9 @@
 
 (defun user-id (user)
   "Return the ID of user.
-   If user is null, call (login) and then return ID of user."
+   If user is null, call (connect) and then return ID of user."
   (if (null user)
-      (to-id (login) "user")
+      (to-id (connect) "user")
       (to-id user "user")))
 
 (defun user-detail (&key (user *user*))
@@ -266,6 +283,41 @@
 (defun route-details (route)
   "Get details about a route."
   (get-api (format nil "routes/~a" (to-id route "route"))))
+
+(defun download-url (route-or-ride id type &rest parameters &key &allow-other-keys)
+  "Return the URL to download the specified route or ride."
+  (concatenate 'string
+               *rwgps-url* "/" route-or-ride "/" (format nil "~a" id) "." type
+               (when parameters
+                 (format nil "?~{~a~^&~}"
+                         (loop for (name  value) on parameters by #'cddr
+                            when value
+                            collect (format nil "~a=~a"
+                                            (quri:url-encode (string-downcase name))
+                                            (quri:url-encode (format nil "~a" value))))))))
+
+(defun download-ride (id file-name file-type &key (poi-as-wpt) (reduce-to) (cues-as-wpt))
+  "Download a ride to a local file."
+  (with-open-file (outs file-name
+                        :direction :output
+                        :if-exists :supersede)
+    (write-sequence (dex:get (download-url "trips" id file-type
+                                           :sub_format "track"
+                                           :reduce_to reduce-to
+                                           :cues_as_wpt (to-bool cues-as-wpt)
+                                           :poi_as_wpt (to-bool poi-as-wpt))
+                             :cookie-jar *cookies*)
+                    outs))
+  t)
+
+(defun download-route (id file-name file-type &key (turn-notify-distance 30))
+  "Download a route to a local file."
+  (with-open-file (outs file-name :direction :output :if-exists :supersede)
+    (write-sequence (dex:get (download-url "route" (to-id id "route") file-type
+                                           :turn_notification_distance turn-notify-distance)
+                             :cookie-jar *cookies*)
+                    outs))
+  t)
 
 (defun route-search (keywords &key
                                 start-location
@@ -374,7 +426,7 @@
                           (declare (ignorable params))
                           (when *debug-stream*
                             (format *debug-stream* "~a - reconnecting...~%" params))
-                          (login)
+                          (connect)
                           (dex:retry-request 1 :interval 0)))
 
                        ;; Ignore 404 errors because they indicate empty result sets
