@@ -284,17 +284,13 @@
 
 (defun download-ride (id file-name file-type &key (poi-as-wpt) (reduce-to) (cues-as-wpt))
   "Download a ride to a local file."
-  (with-open-file (outs file-name
-                        :direction :output
-                        :if-exists :supersede)
-    (write-sequence (dex:get (download-url "trips" (to-id id "ride") file-type
-                                           :sub_format "track"
-                                           :reduce_to reduce-to
-                                           :cues_as_wpt (to-bool cues-as-wpt)
-                                           :poi_as_wpt (to-bool poi-as-wpt))
-                             :cookie-jar *cookies*)
-                    outs))
-  t)
+  (dex:fetch (download-url "trips" (to-id id "ride") file-type
+                           :sub_format "track"
+                           :reduce_to reduce-to
+                           :cues_as_wpt (to-bool cues-as-wpt)
+                           :poi_as_wpt (to-bool poi-as-wpt))
+             file-name
+             :if-exists :supersede))
 
 (defun browse (object type)
   "Browse object with given id and specified type on the Ride With GPS website."
@@ -309,12 +305,12 @@
 
 (defun download-route (id file-name file-type &key (turn-notify-distance 30))
   "Download a route to a local file."
-  (with-open-file (outs file-name :direction :output :if-exists :supersede)
-    (write-sequence (dex:get (download-url "route" (to-id id "route") file-type
-                                           :turn_notification_distance turn-notify-distance)
-                             :cookie-jar *cookies*)
-                    outs))
-  t)
+  (ensure-directories-exist file-name)
+  (dex:fetch (download-url "routes"
+                           (to-id id "route")
+                           file-type
+                           :turn_notification_distance turn-notify-distance)
+             file-name :if-exists :supersede))
 
 (defun route-search (keywords &key
                                 start-location
@@ -462,3 +458,33 @@
                        (= (getjso "status" task) 1))
               (return-from check-task task))))))
       (j-utils:timed-loop 600 2 #'check-task))))
+
+
+(defun download-query (keywords &key
+                                  (location "Boulder, CO")
+                                  (offset 0)
+                                  (limit 20)
+                                  (output-directory "~/tracks/")
+                                  )
+  (let ((routes (rwgps:route-search keywords :start-location location :offset offset :limit limit)))
+    (loop
+       for route in (getjso "results" routes)
+       for name = (if (getjso* "route.name" route)
+                      (getjso* "route.name" route)
+                      (getjso* "trip.name" route))
+       for real-name = (if name
+                           name
+                           (if (getjso* "route.id" route)
+                               (getjso* "route.id" route)
+                               (getjso* "trip.id" route)))
+
+       for out-file-name = (concatenate 'string output-directory real-name ".gpx")
+       when (not (uiop:file-exists-p out-file-name))
+       do
+         (format t "Downloading ~a...~%" out-file-name)
+         (if (string= (getjso "type" route) "route")
+             (rwgps:download-route route out-file-name "gpx")
+             (rwgps:download-ride (getjso* "trip.id" route) out-file-name "gpx"))
+         (format t "Finished downloading ~a...~%" out-file-name)
+         (gpxtools:summarize (gpxtools:read-gpx out-file-name))
+         (sleep 1))))

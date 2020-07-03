@@ -64,6 +64,7 @@
    #:browse
    #:download-ride
    #:download-route
+   #:download-query
 
    ;; Ride creation commands
    #:new-ride-points
