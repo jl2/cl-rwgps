@@ -41,8 +41,7 @@
 
 (defvar *password-function*
   (lambda ()
-    #+swank(swank:eval-in-emacs '(password-read "RideWithGPS Password? " :rwgps))
-    #-swank(with-input-from-file (ins *api-key-file*)
+    (with-input-from-file (ins *api-key-file*)
       (setf *api-key*
             (getjso "password" (read-json ins)))))
   "Function to fetch user password.")
